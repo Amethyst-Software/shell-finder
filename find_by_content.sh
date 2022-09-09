@@ -322,9 +322,13 @@ for FN in `find "$SEARCH_DIR" | egrep $SEARCH_FILES`; do
          # Add lookahead line numbers to FINAL_LINES if lookahead was requested
          if [ $LOOKAHEAD -gt 0 ]; then
             # Get and isolate number of lines in file
-            NUM_LINES=$(wc -l $FN)
+            NUM_LINES=$(wc -l "$FN")
             NUM_LINES=$(echo $NUM_LINES | egrep -o --max-count=1 "[[:digit:]]* ")
             NUM_LINES=$(echo $NUM_LINES | tr -d '[:space:]')
+            LAST_CHAR=$(tail -c -1 "$FN")
+            if [ "$LAST_CHAR" != "\n" ]; then
+               let NUM_LINES+=1
+            fi
 
             # As above, add the lines coming after each result line to FINAL_LINES
             for LINE in "${RES_LINES[@]}"; do
