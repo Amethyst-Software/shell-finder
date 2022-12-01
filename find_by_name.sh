@@ -320,7 +320,7 @@ fi
 
 
 ## MAIN SCRIPT ##
-for FILE in `find "$SEARCH_PATH" -type f`; do
+for FILE in `find -s "$SEARCH_PATH" -type f`; do
    FILE_NAME=$(echo "$FILE" | sed 's/.*\///') # clip file name from whole path
    MATCHED=0
 

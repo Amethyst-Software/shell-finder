@@ -234,7 +234,7 @@ done
 
 
 ## MAIN PROGRAM ##
-for FN in `find "$SEARCH_DIR" | egrep $SEARCH_FILES`; do
+for FN in `find -s "$SEARCH_DIR" | egrep $SEARCH_FILES`; do
    if [ -d "$FN" ]; then
       continue
    fi
