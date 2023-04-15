@@ -351,16 +351,15 @@ for FILE in `find -s "$SEARCH_PATH" -type f`; do
       fi
 
       FILE_SUFFIX=${FILE_NAME##*.} # clip suffix from file name
+      FILE_SUFFIX=$(echo $FILE_SUFFIX | tr [:upper:] [:lower:]) # lowercase for matching
 
       # Search for suffix in list of desirable suffixes
-      shopt -s nocasematch
       for SUFFIX in "${TARGET_SUFFIXES[@]}"; do
          if [ "$SUFFIX" == $FILE_SUFFIX ]; then
             MATCHED=1
             break
          fi
       done
-      shopt -u nocasematch
    fi
 
    DESIRED=$((MATCHED ^= REVERSE_MODE))
