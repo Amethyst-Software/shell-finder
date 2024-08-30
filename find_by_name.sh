@@ -107,6 +107,7 @@ function printHelp()
    mypr "   '--dest path': (Not needed with '--delete' or '--print' option.) The folder to which the selected files should be copied or moved."
    echo "${bold}Optional:${normal}"
    mypr "   '--no-ds': When using the '--dotfile' option, don't show .DS_Store files."
+   mypr "   '--case-ins': Perform name searches with case-insensitivity."
 }
 
 # Checks to see if file name passed in is taken; if so, it attempts to add a number to
@@ -174,6 +175,7 @@ while (( "$#" )); do
       --not-type:* ) MATCH_ARGS="$1"; MATCH_MODE=$MATCH_TYPE; REVERSE_MODE=1; shift;;
       --dotfile )    MATCH_MODE=$MATCH_DOT; REVERSE_MODE=0; shift;;
       --no-ds )      NO_DSS=1; shift;;
+      --case-ins )   shopt -s nocasematch; shift;;
       --from )       SEARCH_PATH="$2"; shift 2;;
       --dest )       DEST_FOLDER="$2"; shift 2;;
       --print )      OPER_MODE=$PRINT; shift;;
