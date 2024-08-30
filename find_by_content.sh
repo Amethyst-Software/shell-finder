@@ -20,6 +20,8 @@ declare -a SEARCH_TERMS_PLUS=()
 declare -a SEARCH_TERMS_MINUS=()
 WITHIN=0
 CASE_INS=""
+SIZE_MIN=0
+SIZE_MAX=0
 MODE=0
 PRINT=1
 COPY=2
@@ -104,9 +106,11 @@ ${bold}Optional:${normal}
     results of all the --find operations.
   --within [num]: Any two hits must be within this many lines.
   --insens: Perform content searches with case-insensitivity.
+  --size-above [num]: Only look at files above this size (in bytes).
+  --size-below [num]: Only look at files below this size (in bytes).
   ${bold}('print' mode only:)${normal}
-  --above [num]: Show this many lines before the matching content.
-  --below [num]: Show this many lines after the matching content.
+  --lines-above [num]: Show this many lines before the matching content.
+  --lines-below [num]: Show this many lines after the matching content.
   --line-num: Print the line number before each line's content.
   --quiet: Minimal output; no header line with the name and number of matches
     in each file. Instead all content matches are printed back to back.
@@ -170,20 +174,22 @@ fi
 # Look for known options as long as there are more arguments to process
 while (( "$#" )); do
    case "$1" in
-      --dir )      SEARCH_DIR="$2"; shift 2;;
-      --in-files ) SEARCH_FILES="$2"; shift 2;;
-      --find )     SEARCH_TERMS_PLUS+=("$2"); let NUM_ARGS+=1; shift 2;;
-      --omit )     SEARCH_TERMS_MINUS+=("$2"); let NUM_ARGS+=1; shift 2;;
-      --within )   WITHIN="$2"; shift 2;;
-      --insens )   CASE_INS="-i"; shift;;
-      --print )    MODE=$PRINT; shift;;
-      --copy-to )  MODE=$COPY; DEST_DIR="$2"; shift 2;;
-      --delete )   MODE=$DELETE; shift;;
-      --above )    LOOKBACK="$2"; shift 2;;
-      --below )    LOOKAHEAD="$2"; shift 2;;
-      --line-num ) SHOW_LINE_NUM=1; shift;;
-      --quiet )    QUIET=1; shift;;
-      * )          echo "Error: Invalid argument '$1' detected."; exit;;
+      --dir )         SEARCH_DIR="$2"; shift 2;;
+      --in-files )    SEARCH_FILES="$2"; shift 2;;
+      --find )        SEARCH_TERMS_PLUS+=("$2"); let NUM_ARGS+=1; shift 2;;
+      --omit )        SEARCH_TERMS_MINUS+=("$2"); let NUM_ARGS+=1; shift 2;;
+      --within )      WITHIN="$2"; shift 2;;
+      --insens )      CASE_INS="-i"; shift;;
+      --size-above )  SIZE_MIN="$2"; shift 2;;
+      --size-below )  SIZE_MAX="$2"; shift 2;;
+      --print )       MODE=$PRINT; shift;;
+      --copy-to )     MODE=$COPY; DEST_DIR="$2"; shift 2;;
+      --delete )      MODE=$DELETE; shift;;
+      --lines-above ) LOOKBACK="$2"; shift 2;;
+      --lines-below ) LOOKAHEAD="$2"; shift 2;;
+      --line-num )    SHOW_LINE_NUM=1; shift;;
+      --quiet )       QUIET=1; shift;;
+      * )             echo "Error: Invalid argument '$1' detected."; exit;;
    esac
 done
 
@@ -232,13 +238,22 @@ for MINUS in "${SEARCH_TERMS_MINUS[@]}"; do
    MINUS_ARGS+=("| egrep $CASE_INS -v $MINUS")
 done
 
+# Build 'find' command. We have to build it and then 'eval' it because of the optional size
+# arguments. It turns out that placing them in strings to substitute them into a "live"
+# 'find' command does not work; the invocation of 'find' cannot contain string variables
+# which contain arguments.
+FIND_CMD="find -s \"$SEARCH_DIR\" -type f ! -name \".DS_Store\""
+if [ $SIZE_MIN -ne 0 ]; then
+   FIND_CMD+=" -size +${SIZE_MIN}c"
+fi
+if [ $SIZE_MAX -ne 0 ]; then
+   FIND_CMD+=" -size -${SIZE_MAX}c"
+fi
+FIND_CMD+=" | egrep $SEARCH_FILES"
+
 
 ## MAIN PROGRAM ##
-for FN in `find -s "$SEARCH_DIR" | egrep $SEARCH_FILES`; do
-   if [ -d "$FN" ]; then
-      continue
-   fi
-
+for FN in `eval $FIND_CMD`; do
    let CHECKED+=1
 
    # Get result of all plus terms, with accompanying line numbers
