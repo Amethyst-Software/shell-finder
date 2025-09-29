@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Find By Name
-# A script that recursively searches a directory for files by name. The results can be
-# printed to screen, copied, moved, or deleted. Copying and moving can preserve the
-# original folder structure if desired. Run with no parameters for usage.
+# A script that recursively searches a directory or reads a text file, selecting files by
+# name, suffix or type. The results can be printed to screen, copied, moved, or deleted.
+# Copying and moving can preserve the original folder structure if desired. Run with no
+# parameters for usage.
 # Recommended width:
 # |--------------------------------------------------------------------------------------|
 
@@ -14,6 +15,8 @@ IFS="
 
 
 ## CONSTANTS ##
+SOURCE_DIR=1
+SOURCE_FILE=2
 MATCH_BODY=1
 MATCH_SUFF=2
 MATCH_TYPE=3
@@ -34,10 +37,12 @@ TRASH_FOLDER="$HOME/.Trash/Deleted files ($THE_TIME)"
 
 
 ## VARIABLES ##
+SOURCE=0
 MATCH_MODE=0
 NO_DSS=0
 OPER_MODE=0
 REVERSE_MODE=0 # 0 = operate on positive matches, 1 = use the negative matches
+SEARCH_FILE=""
 SEARCH_PATH=""
 DEST_FOLDER=""
 MATCH_ARGS=""
@@ -94,20 +99,22 @@ function printHelp()
    mypr "   '--move-flat': Move matching files into the top level of the destination folder (files will be safely renamed in the case of naming conflicts)."
    mypr "   '--delete': Move the matching files to the Trash."
    echo "${bold}Name pattern of files to copy/delete:${normal}"
-   mypr "   '--name:pattern': Find all files matching 'pattern', a regex pattern."
-   mypr "   '--not-name:pattern': Find all files that don't match 'pattern'."
+   mypr "   '--name:pattern': Find all files where the name BODY matches 'pattern', a regex pattern (to match suffixes, use '--suff')."
+   mypr "   '--not-name:pattern': Find all files where the name BODY doesn't match 'pattern' (to rule out files by suffix, use '--not-suff')."
    mypr "   '--suff:suffix1,suffix2': Find all files with these specific suffixes."
    mypr "   '--not-suff:suffix1,suffix2': Find all files without these specific suffixes."
    mypr "   '--type:set1,set2': Find all files with these sets of suffixes. The available sets are:"
    printSetList
    mypr "   '--not-type:set1,set2': Find all files that aren't in these sets of suffixes."
    mypr "   '--dotfile': Find all files beginning with a period."
-   echo "${bold}Directories:${normal}"
+   echo "${bold}Source and destination:${normal}"
+   mypr "   '--from:path': A text file containing files with absolute paths, one line each."
    mypr "   '--from path': (Note the lack of a colon after 'from'.) The directory to search recursively."
    mypr "   '--dest path': (Not needed with '--delete' or '--print' option.) The folder to which the selected files should be copied or moved."
    echo "${bold}Optional:${normal}"
    mypr "   '--no-ds': When using the '--dotfile' option, don't show .DS_Store files."
    mypr "   '--case-ins': Perform name searches with case-insensitivity."
+   mypr "Tip for zsh users: If you wish to match all files, entering the name body match pattern '.*' will cause zsh to expand it to all files beginning with '.' and pass those to the script. Enter '[.]*' to escape the glob expansion."
 }
 
 # Checks to see if file name passed in is taken; if so, it attempts to add a number to
@@ -176,7 +183,8 @@ while (( "$#" )); do
       --dotfile )    MATCH_MODE=$MATCH_DOT; REVERSE_MODE=0; shift;;
       --no-ds )      NO_DSS=1; shift;;
       --case-ins )   shopt -s nocasematch; shift;;
-      --from )       SEARCH_PATH="$2"; shift 2;;
+      --from:* )     SEARCH_FILE=${1##*--from:}; SOURCE=$SOURCE_FILE; shift;;
+      --from )       SEARCH_PATH="$2"; SOURCE=$SOURCE_DIR; shift 2;;
       --dest )       DEST_FOLDER="$2"; shift 2;;
       --print )      OPER_MODE=$PRINT; shift;;
       --copy-mirr )  OPER_MODE=$COPY_MIRR; shift;;
@@ -199,8 +207,8 @@ if [ $OPER_MODE -eq 0 ]; then
    exit
 fi
 
-if [ -z "$SEARCH_PATH" ]; then
-   mypr "You need to specify the folder to search using '--from PATH'. Aborting."
+if [ $SOURCE -eq 0 ]; then
+   mypr "You need to specify a folder to search using '--from PATH' or a text file to read using '--from:FILE'. Aborting."
    exit
 fi
 
@@ -214,8 +222,13 @@ if [ ! -z "$DEST_FOLDER" ] && [ $OPER_MODE -eq $DELETE ]; then
    exit
 fi
 
-if [ ! -d "$SEARCH_PATH" ]; then
+if [ $SOURCE -eq $SOURCE_DIR ] && [ ! -d "$SEARCH_PATH" ]; then
    mypr "Can't search folder '$SEARCH_PATH' because it doesn't exist. Aborting."
+   exit
+fi
+
+if [ $SOURCE -eq $SOURCE_FILE ] && [ ! -f "$SEARCH_FILE" ]; then
+   mypr "Can't read file '$SEARCH_FILE' because it doesn't exist. Aborting."
    exit
 fi
 
@@ -227,12 +240,28 @@ fi
 if [ $MATCH_MODE -eq $MATCH_SUFF ] || [ $MATCH_MODE -eq $MATCH_TYPE ]; then
    # Place comma-separated values following "--[not-]suff/type:" into an array
    IFS=","
-   MATCH_ELS=(${MATCH_ARGS##*:})
+   if [ $MATCH_MODE -eq $MATCH_SUFF ]; then
+      if [ $REVERSE_MODE -eq 0 ]; then
+         MATCH_ELS=(${MATCH_ARGS##*--suff:})
+      else
+         MATCH_ELS=(${MATCH_ARGS##*--not-suff:})
+      fi
+   else
+      if [ $REVERSE_MODE -eq 0 ]; then
+         MATCH_ELS=(${MATCH_ARGS##*--type:})
+      else
+         MATCH_ELS=(${MATCH_ARGS##*--not-type:})
+      fi
+   fi
    IFS="
 "
 else
    # Strip "--[not-]name:" from search string
-   MATCH_NAME=(${MATCH_NAME##*:})
+   if [ $REVERSE_MODE -eq 0 ]; then
+      MATCH_NAME=(${MATCH_NAME##*--name:})
+   else
+      MATCH_NAME=(${MATCH_NAME##*--not-name:})
+   fi
 fi
 
 # Add user's suffixes or sets of suffixes into our target suffixes array
@@ -296,10 +325,14 @@ else
    echo -n "Moving files to Trash "
 fi
 
-if [ $OPER_MODE -ne $PRINT ] && [ $OPER_MODE -ne $DELETE ]; then
-   echo -n "from $SEARCH_PATH to $DEST_FOLDER "
+if [ $SOURCE -eq $SOURCE_FILE ]; then
+   echo -n "which are found in file $SEARCH_FILE "
 else
-   echo -n "in $SEARCH_PATH "
+   echo -n "from $SEARCH_PATH "
+fi
+   
+if [ $OPER_MODE -ne $PRINT ] && [ $OPER_MODE -ne $DELETE ]; then
+   echo -n "to $DEST_FOLDER "
 fi
 
 if [ $MATCH_MODE == $MATCH_DOT ]; then
@@ -315,14 +348,23 @@ else
 fi
 
 if [ $MATCH_MODE -eq $MATCH_BODY ]; then
-   echo "name pattern '$MATCH_NAME'..."
+   echo "name body pattern '$MATCH_NAME'..."
 elif [ $MATCH_MODE -eq $MATCH_SUFF ] || [ $MATCH_MODE -eq $MATCH_TYPE ]; then
    echo "suffix list {${TARGET_SUFFIXES[@]}}..."
 fi
 
 
 ## MAIN SCRIPT ##
-for FILE in `find -s "$SEARCH_PATH" -type f`; do
+READ_CMD="find -s \"\$SEARCH_PATH\" -type f"
+if [ $SOURCE -eq $SOURCE_FILE ]; then
+   READ_CMD="cat \"\$SEARCH_FILE\""
+fi
+for FILE in $(eval "$READ_CMD"); do
+   if [ $SOURCE -eq $SOURCE_FILE ] && [ ! -f "$FILE" ]; then
+      echo "Skipped non-existent file $FILE."
+      continue
+   fi
+
    FILE_NAME=$(echo "$FILE" | sed 's/.*\///') # clip file name from whole path
    MATCHED=0
 
@@ -364,7 +406,7 @@ for FILE in `find -s "$SEARCH_PATH" -type f`; do
       done
    fi
 
-   DESIRED=$((MATCHED ^= REVERSE_MODE))
+   DESIRED=$((MATCHED ^= REVERSE_MODE)) # desired = not desired if we're in reverse mode
    if [ $DESIRED -eq 1 ]; then
       if [ $OPER_MODE -eq $COPY_MIRR ]; then
          REL_PATH="${FILE#$SEARCH_PATH/}" # get path to file relative to starting dir.
